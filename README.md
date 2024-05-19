@@ -1,5 +1,5 @@
-# Robo Picasso
+# Lazy Photgrapher Problem
 
-What would it take for a robot to see everything in 3D moving in 2D? 
+What would it take for a lazy photographer to have all the scene best characteristics while moving the least?
 
-The art gallery problem solved for autonomous systems in SE(2), simply.
+The single guard art gallery problem solved for autonomous systems in SE(2), simply.
