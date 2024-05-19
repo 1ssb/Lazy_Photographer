@@ -6,6 +6,8 @@ The single guard art gallery problem solved for autonomous systems in SE(2), sim
 
 ---
 
+---
+
 # 3D Camera Frustum Visualization
 
 This script visualizes camera frustums and points in 3D space using Plotly. It allows for multiple camera configurations and highlights points based on their visibility within the frustums.
