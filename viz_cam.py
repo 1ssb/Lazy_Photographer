@@ -22,7 +22,7 @@ def rotation_matrix_from_euler(roll, pitch, yaw):
     Rz = np.array([[np.cos(yaw), -np.sin(yaw), 0], [np.sin(yaw), np.cos(yaw), 0], [0, 0, 1]])
     return Rz @ Ry @ Rx
 
-def calculate_frustum_points(camera_position, roll, pitch, yaw, f, near_dist, far_dist, img_size):
+def calculate_frustum_points(camera_position, roll, pitch, yaw, fx, fy, cx, cy, near_dist, far_dist, img_width, img_height):
     """
     Calculate the points of the camera frustum.
     
@@ -31,10 +31,14 @@ def calculate_frustum_points(camera_position, roll, pitch, yaw, f, near_dist, fa
     - roll: Rotation around x-axis in degrees
     - pitch: Rotation around y-axis in degrees
     - yaw: Rotation around z-axis in degrees
-    - f: Focal length in pixels
+    - fx: Focal length along x-axis in pixels
+    - fy: Focal length along y-axis in pixels
+    - cx: Principal point x-coordinate in pixels
+    - cy: Principal point y-coordinate in pixels
     - near_dist: Near plane distance
     - far_dist: Far plane distance
-    - img_size: Image size (assuming square image)
+    - img_width: Image width in pixels
+    - img_height: Image height in pixels
 
     Returns:
     - near_plane: Coordinates of the near plane corners
@@ -42,18 +46,19 @@ def calculate_frustum_points(camera_position, roll, pitch, yaw, f, near_dist, fa
     """
     if not isinstance(camera_position, (list, np.ndarray)) or len(camera_position) != 3:
         raise ValueError("camera_position must be a list or numpy array with 3 elements")
-    if not isinstance(f, (int, float)) or f <= 0:
-        raise ValueError("focal_length must be a positive number")
-    if not isinstance(img_size, (int, float)) or img_size <= 0:
-        raise ValueError("img_size must be a positive number")
-    if not isinstance(near_dist, (int, float)) or near_dist <= 0:
-        raise ValueError("near_plane_dist must be a positive number")
+    if not all(isinstance(param, (int, float)) and param > 0 for param in [fx, fy, near_dist, far_dist, img_width, img_height]):
+        raise ValueError("fx, fy, near_dist, far_dist, img_width, and img_height must be positive numbers")
+    if not isinstance(cx, (int, float)) or not isinstance(cy, (int, float)):
+        raise ValueError("cx and cy must be numbers")
     if not isinstance(far_dist, (int, float)) or far_dist <= near_dist:
         raise ValueError("far_plane_dist must be greater than near_plane_dist")
     
-    fov = 2 * np.arctan(img_size / (2 * f))
-    near_height = near_width = 2 * np.tan(fov / 2) * near_dist
-    far_height = far_width = 2 * np.tan(fov / 2) * far_dist
+    fov_x = 2 * np.arctan(img_width / (2 * fx))
+    fov_y = 2 * np.arctan(img_height / (2 * fy))
+    near_height = 2 * np.tan(fov_y / 2) * near_dist
+    near_width = 2 * np.tan(fov_x / 2) * near_dist
+    far_height = 2 * np.tan(fov_y / 2) * far_dist
+    far_width = 2 * np.tan(fov_x / 2) * far_dist
     near_centroid = np.array([0, 0, near_dist])
     far_centroid = np.array([0, 0, far_dist])
     near_plane = np.array([near_centroid + np.array([x, y, 0]) for x in [-near_width / 2, near_width / 2] for y in [-near_height / 2, near_height / 2]])
@@ -103,21 +108,25 @@ def draw_frustum_and_cameras(cameras, points_inside, points_outside, points_mult
     fig = go.Figure()
     
     # Generate colors for cameras using a colormap
-    colors = plt.cm.get_cmap('tab10', len(cameras))
+    cmap = plt.colormaps.get_cmap('Set1')
 
     for idx, camera in enumerate(cameras):
         camera_position = np.array(camera['camera_pos'])
         roll, pitch, yaw = camera['cam_orien']
-        f = camera['focal_length']
-        img_size = camera['img_size']
+        fx = camera['fx']
+        fy = camera['fy']
+        cx = camera['cx']
+        cy = camera['cy']
+        img_width = camera['img_width']
+        img_height = camera['img_height']
         near_dist = camera['near_plane_dist']
         far_dist = camera['far_plane_dist']
         
         # Convert color from colormap to hexadecimal
-        color = colors(idx)
+        color = cmap(idx)
         hex_color = '#%02x%02x%02x' % (int(color[0]*255), int(color[1]*255), int(color[2]*255))
 
-        near_plane, far_plane = calculate_frustum_points(camera_position, roll, pitch, yaw, f, near_dist, far_dist, img_size)
+        near_plane, far_plane = calculate_frustum_points(camera_position, roll, pitch, yaw, fx, fy, cx, cy, near_dist, far_dist, img_width, img_height)
 
         # Add near and far planes as transparent surfaces with legend
         fig.add_trace(go.Mesh3d(
@@ -219,17 +228,21 @@ def get_viz(user_inputs):
     points_in_frustums = np.zeros(len(points), dtype=int)
     
     for camera in cameras:
-        if not all(key in camera for key in ['camera_pos', 'cam_orien', 'focal_length', 'img_size', 'near_plane_dist', 'far_plane_dist']):
-            raise ValueError("Each camera dictionary must contain 'camera_pos', 'cam_orien', 'focal_length', 'img_size', 'near_plane_dist', and 'far_plane_dist' keys")
+        if not all(key in camera for key in ['camera_pos', 'cam_orien', 'fx', 'fy', 'cx', 'cy', 'img_width', 'img_height', 'near_plane_dist', 'far_plane_dist']):
+            raise ValueError("Each camera dictionary must contain 'camera_pos', 'cam_orien', 'fx', 'fy', 'cx', 'cy', 'img_width', 'img_height', 'near_plane_dist', and 'far_plane_dist' keys")
         
         camera_position = np.array(camera['camera_pos'])
         roll, pitch, yaw = camera['cam_orien']
-        f = camera['focal_length']
-        img_size = camera['img_size']
+        fx = camera['fx']
+        fy = camera['fy']
+        cx = camera['cx']
+        cy = camera['cy']
+        img_width = camera['img_width']
+        img_height = camera['img_height']
         near_dist = camera['near_plane_dist']
         far_dist = camera['far_plane_dist']
 
-        near_plane, far_plane = calculate_frustum_points(camera_position, roll, pitch, yaw, f, near_dist, far_dist, img_size)
+        near_plane, far_plane = calculate_frustum_points(camera_position, roll, pitch, yaw, fx, fy, cx, cy, near_dist, far_dist, img_width, img_height)
         all_frustum_points.append(near_plane)
         all_frustum_points.append(far_plane)
 
@@ -266,16 +279,43 @@ def viz_cameras(cam_dict):
     fig = get_viz(cam_dict)
     save_viz_to_html(fig, 'camera_frustum.html', auto_open=True)
 
-# Example usage
 if __name__ == "__main__":
+    """
+    Example usage:
+
+    The script visualizes camera frustums and points in 3D space. 
+    It requires a dictionary `user_inputs` with two keys: 'cameras' and 'points'.
+
+    'cameras': A list of dictionaries, each representing a camera with the following keys:
+        - 'name': A unique identifier for the camera.
+        - 'camera_pos': A list of 3 elements representing the camera position in world coordinates [x, y, z].
+        - 'cam_orien': A list of 3 elements representing the camera orientation in degrees [roll, pitch, yaw].
+        - 'fx': Focal length along the x-axis in pixels.
+        - 'fy': Focal length along the y-axis in pixels.
+        - 'cx': Principal point x-coordinate in pixels.
+        - 'cy': Principal point y-coordinate in pixels.
+        - 'img_width': Image width in pixels.
+        - 'img_height': Image height in pixels.
+        - 'near_plane_dist': The distance to the near plane of the frustum.
+        - 'far_plane_dist': The distance to the far plane of the frustum.
+
+    'points': A list of 3D points to be visualized in the space.
+
+    The visualization will show the frustums of the two cameras, the points inside one frustum in green, 
+    points inside multiple frustums in orange, and points outside all frustums in yellow.
+    """
     user_inputs = {
         'cameras': [
             {
                 'name': '1',
                 'camera_pos': [0, 0, 0],
                 'cam_orien': [0, 0, 0],
-                'focal_length': 100,
-                'img_size': 128,
+                'fx': 100,
+                'fy': 100,
+                'cx': 64,
+                'cy': 64,
+                'img_width': 128,
+                'img_height': 128,
                 'near_plane_dist': 0.5,
                 'far_plane_dist': 10.0
             },
@@ -283,8 +323,12 @@ if __name__ == "__main__":
                 'name': '2',
                 'camera_pos': [5, 5, 5],
                 'cam_orien': [30, 45, 60],
-                'focal_length': 100,
-                'img_size': 128,
+                'fx': 100,
+                'fy': 100,
+                'cx': 64,
+                'cy': 64,
+                'img_width': 128,
+                'img_height': 128,
                 'near_plane_dist': 0.5,
                 'far_plane_dist': 10.0
             }
