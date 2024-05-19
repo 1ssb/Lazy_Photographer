@@ -1,83 +1,72 @@
 import numpy as np
 
-def calculate_fov(f_ndc):
+def calculate_fov():
     """
-    Calculate the horizontal field of view (FoV) based on the focal length in normalized device coordinates.
+    Calculate the horizontal field of view (FoV) based on a fixed normalized focal length of 0.45.
     """
-    image_size = 128  # Pixel width of the image
-    focal_length = f_ndc * image_size  # Convert to the same units as the image size
+    image_size = 128
+    f_ndc = 0.45
+    focal_length = f_ndc * image_size
     return 2 * np.arctan((image_size / 2) / focal_length)
 
-def is_within_frustum(point, fov_half, near_plane, far_plane):
+def is_within_frustum(point, fov_half, near_plane=0.5, far_plane=10, camera_pose=(0, 0, 0)):
     """
-    Check if a point is within the camera's view frustum considering the FoV and depth planes.
+    Check if a point is within the camera's view frustum from a given camera pose.
     """
+    dx, dy, dz = camera_pose
+    point = (point[0] - dx, point[1] - dy, point[2] - dz)
     distance = np.sqrt(point[0]**2 + point[1]**2 + point[2]**2)
-    if distance < near_plane or distance > far_plane:
-        return False
     horizontal_angle = np.arctan2(point[0], point[2])
-    if abs(horizontal_angle) > fov_half:
-        return False
-    return True
+    return near_plane <= distance <= far_plane and abs(horizontal_angle) <= fov_half
 
-def find_optimal_pose(point, fov_half, near_plane, far_plane):
+def find_heuristic_midpoint(points):
     """
-    Determine the optimal camera pose to observe the point, minimizing the geodesic distance.
+    Calculate a heuristic midpoint based on the average coordinates of the points and including the origin.
     """
-    initial_pose = {'x': 0, 'z': 0, 'yaw': 0}
-    
-    # Try to observe the point from the origin
-    if is_within_frustum(point, fov_half, near_plane, far_plane):
-        angle_to_point = np.arctan2(point[0], point[2])
-        return {'x': 0, 'z': 0, 'yaw': angle_to_point}
-    
-    # Adjust the position to ensure visibility if not visible from the origin
-    optimal_pose = None
-    min_distance = float('inf')
-    for dx in np.linspace(-10, 10, num=20):
-        for dz in np.linspace(-10, 10, num=20):
-            candidate_pose = {'x': dx, 'z': dz, 'yaw': np.arctan2(point[0] - dx, point[2] - dz)}
-            if is_within_frustum((point[0] - dx, point[1], point[2] - dz), fov_half, near_plane, far_plane):
-                distance = np.sqrt(dx**2 + dz**2) + abs(initial_pose['yaw'] - candidate_pose['yaw'])
-                if distance < min_distance:
-                    min_distance = distance
-                    optimal_pose = candidate_pose
-    return optimal_pose
+    # Include the origin in the point set for midpoint calculation
+    all_points = [(0, 0, 0)] + points
+    mean_x = np.mean([p[0] for p in all_points])
+    mean_z = np.mean([p[2] for p in all_points])
+    return mean_x, 0, mean_z
+
+def optimize_camera_pose(points, fov_half):
+    """
+    Use a heuristic method to optimize the camera pose to observe all points.
+    """
+    initial_pose = find_heuristic_midpoint(points)
+    best_pose = initial_pose
+    max_visible = 0
+
+    # Adjust pose iteratively to maximize visible points
+    for dx in np.linspace(initial_pose[0] - 5, initial_pose[0] + 5, 10):
+        for dz in np.linspace(initial_pose[2] - 5, initial_pose[2] + 5, 10):
+            current_pose = (dx, 0, dz)
+            visible_count = sum(is_within_frustum(p, fov_half, 0.5, 10, current_pose) for p in points)
+            if visible_count > max_visible:
+                max_visible = visible_count
+                best_pose = current_pose
+
+            # Early stop if all points are visible
+            if visible_count == len(points):
+                return best_pose, np.arctan2(-dx, -dz)
+
+    return best_pose, np.arctan2(-best_pose[0], -best_pose[2])
 
 def main():
-    # Set up the scene with points and camera parameters
-    n_scenes = int(input("Enter the number of scenes: "))
     points = []
-    fovs_half = []
-    near_planes = []
-    far_planes = []
-
-    for scene_index in range(n_scenes):
-        print(f"Processing Scene {scene_index + 1}")
-        f_ndc = float(input(f"Enter the normalized focal length f_{scene_index + 1} (f >= 1): "))
-        if f_ndc < 1:
-            print("Normalized focal length should be at least 1. Please enter a valid value.")
-            continue
-        fov_half = calculate_fov(f_ndc) / 2
-        fovs_half.append(fov_half)
-        
-        near_plane = 0.7 * 128 * f_ndc
-        far_plane = 10 * 128 * f_ndc
-        near_planes.append(near_plane)
-        far_planes.append(far_plane)
-        
-        x = float(input(f"Enter the x-coordinate of the PoI for Scene {scene_index + 1}: "))
-        y = float(input(f"Enter the y-coordinate of the PoI for Scene {scene_index + 1}: "))
-        z = float(input(f"Enter the z-coordinate of the PoI for Scene {scene_index + 1}: "))
-        
+    n_points = int(input("Enter the number of 3D points: "))
+    for i in range(n_points):
+        x = float(input(f"Enter the x-coordinate of PoI {i + 1}: "))
+        y = float(input(f"Enter the y-coordinate of PoI {i + 1}: "))
+        z = float(input(f"Enter the z-coordinate of PoI {i + 1}: "))
         points.append((x, y, z))
 
-    # Calculate optimal poses for all points
-    for idx, point in enumerate(points):
-        pose = find_optimal_pose(point, fovs_half[idx], near_planes[idx], far_planes[idx])
-        print(f"Optimal Pose for PoI in Scene {idx + 1}:")
-        print(f"  Position: (x={pose['x']}, z={pose['z']})")
-        print(f"  Yaw: {pose['yaw']} radians")
+    fov_half = calculate_fov() / 2
+    best_pose, yaw = optimize_camera_pose(points, fov_half)
+
+    print("Optimal Pose to observe all PoIs:")
+    print(f"Position: (x={best_pose[0]}, y={best_pose[1]}, z={best_pose[2]})")
+    print(f"Yaw: {yaw} radians")
 
 if __name__ == "__main__":
     main()
