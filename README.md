@@ -126,6 +126,3 @@ This project is licensed under the MIT License.
 ## Contribution
 
 Feel free to contribute or report issues to me at Subhransu.Bhattacharjee@anu.edu.au.
-```
-
-Save this content in a file named `README.md` in the same directory as your script. This documentation provides a comprehensive overview of the script's functionality, installation, usage, and other relevant details.
