@@ -1,4 +1,4 @@
-# Lazy Photgrapher Problem
+# The Lazy Photgrapher Problem
 
 What would it take for a lazy photographer to have all the scene best characteristics while moving the least?
 
