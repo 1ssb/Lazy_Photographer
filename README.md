@@ -5,6 +5,7 @@ What would it take for a lazy photographer to have all the scene best characteri
 The single guard art gallery problem solved for autonomous systems in SE(2), simply.
 
 ---
+![A Lazy Photographer who has given up for us to find an optimal solution for him to adjust his pose to take the best image](./meta/image.webp)
 
 ---
 
